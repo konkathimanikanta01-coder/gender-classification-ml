@@ -1,7 +1,7 @@
 # Gender Classification using Machine Learning (Supervised Learning)
 
 ## Project Overview
-This project applies supervised machine learning techniques to predict gender based on behavioural, personality and socioeconomic features. The goal is to compare model performance and identify the most accurate classification approach.
+This project applies supervised machine learning to predict gender based on smartphone usage patterns, HEXACO personality traits, and socioeconomic factors. Using three classification algorithms (Logistic Regression, Random Forest, Naive Bayes), we explore the relationship between digital behavior, personality psychology, and gender with implications for targeted marketing and product strategy.
 
 ## Tools & Technologies
 - R (tidyverse, caret, randomForest, e1071)

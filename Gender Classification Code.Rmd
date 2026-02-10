@@ -1,0 +1,289 @@
+---
+title: "part 2 Final DM"
+output: html_document
+date: "2025-04-01"
+---
+
+Note: Some packages display warnings about being built under R version 4.4.3, while my current environment uses an earlier version. These warnings are non-critical and do not affect the execution or output of the code. All functionality has been tested and works as expected.
+
+#Part II: Supervised Learning – Classification (Predicting Gender from Smartphone Usage)
+This section presents a classification model to predict gender based on smartphone usage, personality traits (HEXACO), and socioeconomic status. The objective is to explore how these factors relate to gender differences in digital behavior, with implications for targeted marketing and product strategy.
+
+#EDA:
+
+```{r}
+library(tidyverse)
+library(caret)
+library(randomForest)
+library(ROCR)
+library(GGally)
+
+df2 <- read.csv("dataset_2.csv")
+
+glimpse(df2)
+
+colSums(is.na(df2))
+```
+
+The dataset contains 532 Smartphone users and includes:
+•	Smartphone: Identifier or status indicator.
+•	Gender:  Target variable 
+•	Age
+•	HEXACO traits (Honesty-Humility, Emotionality, Extraversion, Agreeableness, Conscientiousness, Openness)
+•	Socioeconomic Status (SES): A scale from 1 (low) to 10 (high).
+•	Time Owned Current Phone (months): Duration of phone ownership.
+
+Initial issues in the data included:
+•	Several numeric fields (e.g., Age, Emotionality) were read as character
+•	Presence of invalid values (e.g., “s”, “t”) and outliers (e.g., Age = 223)
+•	Missing values in key fields
+
+
+```{r}
+to_numeric <- c("Age", "Emotionality", "Agreeableness", "Openness")
+
+# Coerce to numeric (non-numeric values become NA)
+df2[to_numeric] <- lapply(df2[to_numeric], function(x) as.numeric(as.character(x)))
+
+
+# Remove rows with invalid or extreme ages
+df2 <- df2 %>%
+  filter(!is.na(Age), Age >= 15, Age <= 100)
+
+# Remove rows with any NA values
+df2_clean <- df2 %>%
+  mutate(
+    Gender = factor(Gender),
+    Smartphone = factor(Smartphone)
+  ) %>%
+  drop_na()
+
+str(df2_clean)
+dim(df2_clean)
+```
+
+The dataset was cleaned to ensure integrity and usability. Starting with 532 rows, incomplete and invalid entries were removed, yielding 489 valid observations and 12 variables. Age was restricted to 15–100 years, variable types were corrected, and formatting errors resolved. Categorical variables (Gender, Smartphone) were converted to factors, and numeric fields (personality scores, SES, age) were properly standardized—ensuring the dataset is fully prepared for analysis.
+
+
+
+# Correlation Plot Between Personality Traits
+To check for multicollinearity and natural grouping of HEXACO
+
+```{r}
+library(GGally)
+df2_numeric <- df2_clean %>%
+  dplyr :: select(Honesty.Humility:Openness)
+ggcorr(df2_numeric, label = TRUE)
+```
+
+A correlation matrix was generated to understand relationships between the personality traits (Honesty-Humility, Emotionality, Extraversion, Agreeableness, Conscientiousness, and Openness). The analysis revealed relatively weak correlations overall, ranging from -0.2 to 0.3, indicating that these personality traits are relatively independent from each other.
+
+
+#Gender Distribution:
+```{r}
+ ggplot(df2_clean, aes(x = Gender, fill = Gender)) +
+  geom_bar() +
+  theme_minimal()+
+   labs(title = "Distribution of Gender", x = "Gender", y = "Count")
+```
+
+The distribution of gender categories within the dataset was visualized to assess class balance, the gender distribution is slightly imbalanced(lesser male). An imbalanced dataset could potentially bias model performance, particularly in classification tasks.
+
+#Train/Test Split
+
+```{r}
+set.seed(42)
+train_index <- createDataPartition(df2_clean$Gender, p = 0.8, list = FALSE)
+train <- df2_clean[train_index, ]
+test  <- df2_clean[-train_index, ]
+
+# Class distribution check
+prop.table(table(train$Gender))
+prop.table(table(test$Gender))
+```
+
+The dataset is imbalanced, with "Female" being the dominant class, while the "Other" category has very few samples, making accurate prediction difficult. To ensure model stability and reduce noise during training, we will focus on binary classification by removing rows labeled "Other" and only considering "Female" vs "Male." For evaluation, we will use a confusion matrix and ROC-AUC score, which is applicable for binary classification.
+
+#Filter to Binary Classes Only (Female vs Male)
+```{r}
+# Filter for binary classification (remove "other")
+df_binary <- df2_clean %>% filter(Gender %in% c("female", "male"))
+
+# Re-split
+set.seed(42)
+train_index <- createDataPartition(df_binary$Gender, p = 0.8, list = FALSE)
+train <- df_binary[train_index, ]
+test  <- df_binary[-train_index, ]
+
+# Drop unused factor level
+train$Gender <- droplevels(train$Gender)
+test$Gender <- droplevels(test$Gender)
+
+# Check
+table(train$Gender)
+```
+
+Data Partition Strategy
+1.	The dataset was filtered to include only "female" and "male" categories
+2.	Data was split into training (80%) and testing (20%) sets
+3.	Factor levels were properly adjusted to reflect the binary classification
+This resulted in:
+•	Training set: 392 users
+•	Test set: 97 users
+This approach ensured balanced representation across the train and test datasets while simplifying the classification problem. This split was used to train all models and evaluate their performance on unseen data.
+
+
+
+#Model Development and Evaluation
+Three models were trained and evaluated:
+
+
+#Logistic regression
+```{r}
+library(reshape2)
+model_log <- glm(Gender ~ ., data = train, family = "binomial")
+
+# Predict probabilities
+pred_log_prob <- predict(model_log, test, type = "response")
+
+
+pred_log_class <- ifelse(pred_log_prob > 0.5, "male", "female") %>% as.factor()
+
+# Confusion Matrix
+confusionMatrix(pred_log_class, test$Gender)
+
+
+cm <- table(Predicted = pred_log_class, Actual = test$Gender)
+cm_melt <- melt(cm)
+
+ggplot(cm_melt, aes(x = Actual, y = Predicted)) +
+  geom_tile(aes(fill = value), color = "white") +
+  geom_text(aes(label = value)) +
+  scale_fill_gradient(low = "white", high = "darkred") +
+  labs(title = "Confusion Matrix (Logistic Regression)")
+```
+
+We used binomial logistic regression with all features to classify "Female" vs "Male." Model performance was assessed via confusion matrix and ROC curve, with AUC summarizing overall accuracy.
+
+The logistic regression model correctly identified 61/65 females (93.8% sensitivity) and 15/30 males (50% specificity), with 4 females misclassified as males and 15 males misclassified as females, showing strong performance for female detection but weaker accuracy for males.
+
+
+
+#ROC & AUC (Logistic)
+
+```{r}
+test_binary <- test %>%
+  mutate(Gender_binary = ifelse(Gender == "male", 1, 0))
+
+pred_log_prob <- predict(model_log, test, type = "response")
+pred_obj <- prediction(pred_log_prob, test_binary$Gender_binary)
+perf <- performance(pred_obj, "tpr", "fpr")
+plot(perf, col = "blue", lwd = 2, main = "ROC Curve - Logistic Regression")
+abline(a = 0, b = 1, lty = 2)
+
+
+auc <- performance(pred_obj, "auc")@y.values[[1]]
+print(paste("AUC =", round(auc, 3)))
+```
+
+The model achieved an AUC of 0.803, indicating excellent discriminative ability (values >0.8 are considered excellent) and strong predictive power for gender classification based on personality traits, supporting the hypothesis that statistically detectable personality differences exist between genders.
+
+
+#Random forest 
+```{r}
+set.seed(123)
+model_rf <- randomForest(Gender ~ ., data = train, importance = TRUE)
+
+# Predict
+pred_rf <- predict(model_rf, test)
+
+# Confusion Matrix
+confusionMatrix(pred_rf, test$Gender)
+
+
+varImpPlot(model_rf)
+```
+
+A Random Forest classifier was implemented to enhance prediction accuracy and determine feature importance. To calculate AUC, probability scores rather than class labels were generated by setting type="prob", allowing assessment of the model's confidence in class predictions. AUC measures classification performance across all thresholds, providing threshold-independent evaluation particularly valuable for imbalanced datasets.
+
+The confusion matrix shows the Random Forest model correctly classified 54/65 females and 17/30 males, while misclassifying 11 females as males and 13 males as females. Overall accuracy reached 74.7% (71/95 correct), with 83.1% sensitivity for females but only 56.7% specificity for males, revealing the same gender-based classification disparity observed in the logistic regression model.
+
+The Random Forest model revealed Emotionality as the strongest gender predictor across both importance metrics. Using MDA, the top predictors were Emotionality, Smartphone, Age, and Conscientiousness. MDG showed a slightly different order: Emotionality, Extraversion, Time Owned Current Phone, and Conscientiousness. The consistent high ranking of Emotionality and Conscientiousness across both metrics confirms their robust association with gender classification.
+
+
+```{r}
+pred_rf_prob <- predict(model_rf, test, type = "prob")[, "male"]
+
+# Convert test Gender to binary (male = 1, female = 0)
+test_binary <- ifelse(test$Gender == "male", 1, 0)
+
+# Evaluate AUC
+pred_rf_obj <- prediction(pred_rf_prob, test_binary)
+perf_rf <- performance(pred_rf_obj, "tpr", "fpr")
+plot(perf_rf, col = "darkgreen", lwd = 2, main = "ROC Curve - Random Forest")
+abline(0, 1, lty = 2)
+
+# AUC
+auc_rf <- performance(pred_rf_obj, "auc")@y.values[[1]]
+print(paste("AUC (Random Forest) =", round(auc_rf, 3)))
+```
+
+The Random Forest model achieved an AUC of 0.791, showing good discriminative ability though marginally lower than logistic regression's 0.803, suggesting both captured similar personality-gender patterns. Despite slightly lower overall accuracy, Random Forest demonstrated more balanced gender classification, correctly identifying more males (17 vs. 15) while sacrificing some female classification accuracy.
+
+#Naive bayes
+
+```{r}
+library(e1071)
+model_nb <- naiveBayes(Gender ~ ., data = train)
+
+# Predict class and probability
+pred_nb_class <- predict(model_nb, test)
+pred_nb_prob <- predict(model_nb, test, type = "raw")[, "male"]
+
+# Confusion Matrix
+confusionMatrix(pred_nb_class, test$Gender)
+
+pred_nb_obj <- prediction(pred_nb_prob, ifelse(test$Gender == "male", 1, 0))
+perf_nb <- performance(pred_nb_obj, "tpr", "fpr")
+plot(perf_nb, col = "purple", lwd = 2, main = "ROC Curve - Naive Bayes")
+abline(0, 1, lty = 2)
+
+auc_nb <- performance(pred_nb_obj, "auc")@y.values[[1]]
+print(paste("AUC (Naive Bayes) =", round(auc_nb, 3)))
+```
+
+We also implemented a Bayesian classification approach using Naive Bayes, a probabilistic model assuming feature independence. Performance was evaluated through a confusion matrix for accuracy, while a ROC curve was plotted to analyze behavior across thresholds. AUC was calculated to enable comparison with other models.
+
+The Naive Bayes model correctly classified 57 females and 16 males, with 8 false positives and 14 false negatives, achieving 76.8% accuracy—between logistic regression (80.0%) and Random Forest (74.7%). It showed 87.7% sensitivity for females and 53.3% specificity for males, reinforcing the trend that female profiles are more distinct and easier to classify.
+
+The Naive Bayes model achieved an AUC of 0.795, comparable to logistic regression (0.803) and Random Forest (0.791), indicating strong discriminative ability. This consistency across models suggests a robust link between personality traits and gender. Notably, Naive Bayes performed well despite assuming feature independence—likely violated among traits—showing that even simple trait-gender relationships hold strong predictive value.
+
+
+#Results and Model Comparison
+
+
+Metric	    Logistic Regression	 Random Forest	        Naive Bayes (Bayesian)
+Accuracy     	0.800	                0.747	                       0.768
+Kappa	        0.486	                0.405	                       0.434
+Sensitivity 	0.939	                0.831	                       0.877
+Specificity 	0.500	                0.567	                       0.533
+AUC	          0.803	                0.791	                       0.795
+
+
+While all models performed well, logistic regression was selected as the final model due to its:
+•	Highest AUC (0.803) & Accuracy(0.800)
+•	High sensitivity and reasonable specificity
+•	Interpretability — allowing us to understand which traits influenced classification most
+
+#Why AUC?
+AUC was chosen over raw accuracy due to the dataset’s imbalance (~67% female) and its ability to evaluate model performance across all thresholds. It captures both sensitivity and specificity, which is crucial for balanced gender classification.
+
+#Limitations and Considerations
+•	The binary approach excludes the “Other” gender category, reducing inclusivity.
+•	HEXACO traits are self-reported and subjective, potentially introducing noise.
+•	Additional features or interaction terms could potentially improve model performance
+•	More sophisticated ensemble methods or deep learning approaches might yield even better results
+
+
+#Conclusion
+This supervised learning task demonstrated that gender classification from behavioral and psychometric features is feasible with solid predictive accuracy. The findings highlight the predictive power of personality traits — especially Emotionality, Openness and  Extraversion,— in digital behavior modeling. Logistic regression outperformed other models with an accuracy of 80% and an AUC of 0.803, making it the best choice for this task. Logistic regression proved both effective and interpretable, aligning well with business and ethical deployment contexts where explainability matters.

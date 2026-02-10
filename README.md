@@ -1,2 +1,38 @@
-# gender-classification-ml
-Machine learning project predicting gender using behavioural and demographic data with logistic regression, random forest and Naive Bayes in R.
+# Gender Classification using Machine Learning (Supervised Learning)
+
+## Project Overview
+This project applies supervised machine learning techniques to predict gender based on behavioural, personality and socioeconomic features. The goal is to compare model performance and identify the most accurate classification approach.
+
+## Tools & Technologies
+- R (tidyverse, caret, randomForest, e1071)
+- Logistic Regression
+- Random Forest
+- Naive Bayes
+- Data preprocessing & feature engineering
+- Model evaluation and comparison
+
+## Project Workflow
+1. Data cleaning and preprocessing
+2. Exploratory Data Analysis (EDA)
+3. Feature selection and transformation
+4. Model building:
+   - Logistic Regression
+   - Random Forest
+   - Naive Bayes
+5. Model comparison using accuracy and performance metrics
+6. Business interpretation of results
+
+## Key Outcomes
+- Built multiple classification models to predict gender
+- Compared model performance and accuracy
+- Demonstrated practical application of machine learning for decision-making
+
+## Files Included
+- Full R code (R Markdown)
+- Final analysis report (HTML)
+- Dataset 
+
+## Author
+MSc Business Analytics Graduate  
+University of Bath  
+Aspiring Data / Business Analyst
